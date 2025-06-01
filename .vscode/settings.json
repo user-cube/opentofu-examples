@@ -1,0 +1,26 @@
+{
+  // Editor preferences
+  "editor.insertSpaces": true,
+  "editor.tabSize": 2,
+  "editor.formatOnSave": true,
+
+  // File formatting behavior
+  "files.encoding": "utf8",
+  "files.eol": "\n",
+  "files.insertFinalNewline": true,
+  "files.trimFinalNewlines": true,
+  "files.trimTrailingWhitespace": true,
+
+  // Optional: Prevent accidental file search noise
+  "files.exclude": {
+    ".terraform": true
+  },
+  "search.exclude": {
+    ".terraform": true
+  },
+
+  // Optional: Editor behavior for Terraform files
+  "[terraform]": {
+    "editor.formatOnSave": true
+  }
+}
