@@ -42,11 +42,15 @@ module "ec2_instance" {
   source   = "terraform-aws-modules/ec2-instance/aws"
   for_each = local.ec2_instances
 
-  name                 = "instance-${each.key}"
-  instance_type        = each.value.instance_type
-  ami                  = each.value.ami_id
-  monitoring           = true
-  key_name             = null
+  name          = "instance-${each.key}"
+  instance_type = each.value.instance_type
+  ami           = each.value.ami_id
+  monitoring    = true
+  key_name      = null
+  subnet_id = element(
+    data.aws_subnets.private-subnets.ids,
+    index(keys(local.ec2_instances), each.key) % length(data.aws_subnets.private-subnets.ids)
+  )
   iam_instance_profile = aws_iam_instance_profile.ssm_instance_profile.name
   vpc_security_group_ids = [
     data.terraform_remote_state.terraform_state["security-groups"].outputs.ec2_security_group_ids

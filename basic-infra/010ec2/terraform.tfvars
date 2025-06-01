@@ -2,4 +2,4 @@ region = "us-east-1"
 env    = "PROD"
 
 vpc_name = "PROD-VPC-US-EAST-1"
-domain   = "ruicoelho.pt"
+domain   = "opentofu.ruicoelho.pt"

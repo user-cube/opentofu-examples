@@ -24,13 +24,12 @@ data "terraform_remote_state" "terraform_state" {
     [
       "acm",
       "security-groups",
-      "s3",
-      "ec2"
+      "s3"
     ]
   )
   backend = "s3"
   config = {
-    bucket = "992382848249-opentofu-state-bucket"
+    bucket = "767397971892-opentofu-state-bucket"
     key    = "us-east-1/basic-infra/${each.value}"
     region = "us-east-1"
   }
