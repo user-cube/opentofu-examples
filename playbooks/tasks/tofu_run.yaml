@@ -1,0 +1,48 @@
+- name: Check if .env exists
+  ansible.builtin.stat:
+    path: "{{ project_dir }}/.env"
+  register: env_stat
+
+- name: Show current directory
+  ansible.builtin.debug:
+    msg: "Processing directory: {{ project_dir }}"
+
+- name: Read .env file
+  ansible.builtin.shell: |
+    set -a
+    source {{ project_dir }}/.env
+    set +a
+    env | grep TF_VAR_
+  when: env_stat.stat.exists
+  register: env_output
+  changed_when: false
+  no_log: true
+
+- name: Build environment dictionary
+  ansible.builtin.set_fact:
+    env_vars: "{{ {} }}"
+  when: env_stat.stat.exists
+  no_log: true
+
+- name: Add environment variables
+  ansible.builtin.set_fact:
+    env_vars: "{{ env_vars | combine({item.split('=')[0]: item.split('=')[1]}) }}"
+  when: env_stat.stat.exists
+  loop: "{{ env_output.stdout_lines }}"
+  no_log: true
+
+- name: Show command being executed
+  ansible.builtin.debug:
+    msg: "Running command: {{ tofu_cmd }} in directory: {{ project_dir }}"
+
+- name: Run {{ tofu_cmd }}
+  ansible.builtin.shell: "{{ tofu_cmd }}"
+  args:
+    chdir: "{{ project_dir }}"
+  environment: "{{ env_vars | default({}) }}"
+  register: tofu_output
+  failed_when: tofu_output.rc != 0
+
+- name: Show command status
+  ansible.builtin.debug:
+    msg: "Command completed with status: {{ 'Success' if tofu_output.rc == 0 else 'Failed' }}"

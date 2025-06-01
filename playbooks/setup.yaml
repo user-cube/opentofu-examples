@@ -1,0 +1,139 @@
+---
+- name: Cleanup Terraform artifacts, update backend, and run Tofu
+  hosts: localhost
+  gather_facts: false
+
+  collections:
+  - community.general
+
+  vars:
+    base_dir: "../basic-infra"
+    new_aws_account_id: "992382848249"
+
+    # Patterns to remove (add or delete rows as you wish)
+    cleanup_targets:
+    - { pattern: ".terraform", type: "directory" }
+    - { pattern: ".terraform.tfstate", type: "file" }
+    - { pattern: ".terraform.tfstate.backup", type: "file" }
+
+  tasks:
+
+  #################################################################
+  # 1.  Delete .terraform folders, state files, and backups
+  #################################################################
+  - block:
+    - name: Find {{ item.pattern }}
+      ansible.builtin.find:
+        paths: "{{ base_dir }}"
+        patterns: "{{ item.pattern }}"
+        file_type: "{{ item.type }}"
+        recurse: yes
+        hidden: yes
+      loop: "{{ cleanup_targets }}"
+      loop_control:
+        label: "{{ item.pattern }}"
+      register: cleanup_find
+
+    - name: Delete all matched artifacts
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: >-
+        {{
+          cleanup_find.results
+          | map(attribute='files')
+          | flatten
+        }}
+      loop_control:
+        label: "{{ item.path }}"
+    name: Delete Terraform artifacts
+
+  #################################################################
+  # 2.  Update every backend.tf so it points at the new state bucket
+  #################################################################
+  - name: Locate backend.tf files
+    ansible.builtin.find:
+      paths: "{{ base_dir }}"
+      patterns: "backend.tf"
+      file_type: file
+      recurse: yes
+      hidden: yes
+    register: backend_files
+
+  - name: Locate data.tf files
+    ansible.builtin.find:
+      paths: "{{ base_dir }}"
+      patterns: "data.tf"
+      file_type: file
+      recurse: yes
+      hidden: yes
+    register: data_files
+
+  - name: Replace AWS account ID in backend.tf
+    ansible.builtin.replace:
+      path: "{{ item.path }}"
+      regexp: "\\b\\d{12}(-opentofu-state-bucket)\\b"
+      replace: "{{ new_aws_account_id }}\\1"
+      backup: no
+    loop: "{{ backend_files.files }}"
+    loop_control:
+      label: "{{ item.path }}"
+
+  - name: Replace AWS account ID in data.tf
+    ansible.builtin.replace:
+      path: "{{ item.path }}"
+      regexp: "\\b\\d{12}(-opentofu-state-bucket)\\b"
+      replace: "{{ new_aws_account_id }}\\1"
+      backup: no
+    loop: "{{ data_files.files }}"
+    loop_control:
+      label: "{{ item.path }}"
+
+  #################################################################
+  # 3.  Run `tofu init` and `tofu apply` inside each project folder
+  #################################################################
+  - name: Get directory names and paths
+    ansible.builtin.set_fact:
+      dirs_and_paths: >-
+        {{
+          backend_files.files
+          | map(attribute='path')
+          | map('dirname')
+          | map('basename')
+          | zip(backend_files.files | map(attribute='path'))
+        }}
+
+  - name: Sort directories by numeric prefix
+    ansible.builtin.set_fact:
+      sorted_backend_files: >-
+        {{
+          dirs_and_paths
+          | sort(attribute='0')
+          | map('last')
+        }}
+
+  - name: Debug sorted directories
+    ansible.builtin.debug:
+      msg: "Processing directories in order: {{ dirs_and_paths | map('first') | list }}"
+
+  - name: Process state directory first
+    include_tasks: tasks/tofu_run.yaml
+    vars:
+      tofu_cmd: "tofu init && tofu apply -auto-approve"
+      project_dir: "../basic-infra/001state"
+
+  - name: Process state directory
+    include_tasks: tasks/tofu_run.yaml
+    vars:
+      tofu_cmd: "tofu init && tofu apply -auto-approve"
+      project_dir: "../basic-infra/001state"
+
+  - name: Process remaining directories
+    include_tasks: tasks/tofu_run.yaml
+    vars:
+      tofu_cmd: "tofu init && tofu apply -auto-approve"
+      project_dir: "{{ backend_file | dirname }}"
+    loop: "{{ sorted_backend_files }}"
+    loop_control:
+      loop_var: backend_file
+      label: "{{ project_dir }}"
